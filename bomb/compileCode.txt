@@ -1,0 +1,59 @@
+Border relations with Canada have never been better.
+
+
+0000000000400efc <phase_2>:
+  400efc:	55                   	push   %rbp
+  400efd:	53                   	push   %rbx
+  400efe:	48 83 ec 28          	sub    $0x28,%rsp                    // 28-rsp?这个是什么
+  400f02:	48 89 e6             	mov    %rsp,%rsi 
+  400f05:	e8 52 05 00 00       	callq  40145c <read_six_numbers>
+  400f0a:	83 3c 24 01          	cmpl   $0x1,(%rsp)                   // (%rsp) != 1的话置为1
+  400f0e:	74 20                	je     400f30 <phase_2+0x34>		 // 当上面结果为0的时候跳转到 400f30
+																		 // 否则就爆炸，所以(%rsp)应该要小于1
+  400f10:	e8 25 05 00 00       	callq  40143a <explode_bomb>
+  400f15:	eb 19                	jmp    400f30 <phase_2+0x34>
+  
+  400f17:	8b 43 fc             	mov    -0x4(%rbx),%eax 				// 这是read_six_numbers成功之后经过一系列操作回到这里，rbx里面之前是5，现在-4添加到eax里面去
+																		// 所以现在eax是1
+  400f1a:	01 c0                	add    %eax,%eax					// add A, B --> A = A+B, 所以这个是把eax double，res *= 2 = 2*1=2
+  400f1c:	39 03                	cmp    %eax,(%rbx)					// 判断eax寄存器的值 和 (%rbx)指向的值的大小, eax现在是2， 但是rbx是5
+  400f1e:	74 05                	je     400f25 <phase_2+0x29>		// je是jump if zero，所以就是当结果为0的时候跳转
+  400f20:	e8 15 05 00 00       	callq  40143a <explode_bomb>
+  400f25:	48 83 c3 04          	add    $0x4,%rbx    9？
+  400f29:	48 39 eb             	cmp    %rbp,%rbx    19 9
+  400f2c:	75 e9                	jne    400f17 <phase_2+0x1b>
+  400f2e:	eb 0c                	jmp    400f3c <phase_2+0x40>
+  
+  400f30:	48 8d 5c 24 04       	lea    0x4(%rsp),%rbx               // read_six_numbers 之后对比，条件跳转到这里， rbx 为 5=101
+																		// lea 是load effective address, 就是c语言里面的&
+																		// 所以这一句就是把 %rsp(x)+4 放置到rbx里面
+  400f35:	48 8d 6c 24 18       	lea    0x18(%rsp),%rbp				// x+18=rbp=19 就是 10011
+  400f3a:	eb db                	jmp    400f17 <phase_2+0x1b>        // jmp即为无条件跳转，到400f17那一行
+  400f3c:	48 83 c4 28          	add    $0x28,%rsp
+  400f40:	5b                   	pop    %rbx
+  400f41:	5d                   	pop    %rbp
+  400f42:	c3                   	retq   
+  
+  1 2 5 
+  
+  
+000000000040145c <read_six_numbers>:
+  40145c:	48 83 ec 18          	sub    $0x18,%rsp  
+  
+  401460:	48 89 f2             	mov    %rsi,%rdx              把第二个参数复制到rdx
+  401463:	48 8d 4e 04          	lea    0x4(%rsi),%rcx         第二个参数+4 复制到第四个argument的寄存器 0010
+  401467:	48 8d 46 14          	lea    0x14(%rsi),%rax        第二个参数+14 复制到返回结果寄存器		1110
+  40146b:	48 89 44 24 08       	mov    %rax,0x8(%rsp)         结果 第二参数+14 复制到rsp+8
+  401470:	48 8d 46 10          	lea    0x10(%rsi),%rax		  第二个参数+10 复制到结果					1010
+  401474:	48 89 04 24          	mov    %rax,(%rsp)			  结果 第二参数+10 复制到rsp	
+  401478:	4c 8d 4e 0c          	lea    0xc(%rsi),%r9		  第二参数+12 放置到r9						1100
+  40147c:	4c 8d 46 08          	lea    0x8(%rsi),%r8		  第二参数+8  放置到r8						0100
+  401480:	be c3 25 40 00       	mov    $0x4025c3,%esi		  这个值放置到第二个参数的低位 32 bit  10000000010010111000011
+  401485:	b8 00 00 00 00       	mov    $0x0,%eax              把0 放到结果寄存器的低 32位 
+  40148a:	e8 61 f7 ff ff       	callq  400bf0 <__isoc99_sscanf@plt>
+  40148f:	83 f8 05             	cmp    $0x5,%eax              大于则跳转 5> 结果
+  401492:	7f 05                	jg     401499 <read_six_numbers+0x3d>
+  401494:	e8 a1 ff ff ff       	callq  40143a <explode_bomb>
+  
+  401499:	48 83 c4 18          	add    $0x18,%rsp
+  40149d:	c3                   	retq   

