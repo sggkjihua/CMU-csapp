@@ -54,7 +54,14 @@
 // 这两个计算方法同样也看图，next block pointer，实际上 ((char *)(bp) - WSIZE) 就是 HDRP，header address，我们得到整个块的大小，然后bp 加上整块大小，这里也知道我们的 address 总是指向 payload
 // prev block pointer, ((char *)(bp) - DSIZE) 得到 previous block footer，计算之前的块的大小，然后bp - 之前的块大小，指向 payload
 
+/* Doubly linked free list manipulations */
+#define GET_PREV(p)      (GET(p))	  /* Just a alias of former GET */
+#define PUT_PREV(p, val) (PUT(p, val))  /* Alias of former PUT */
+#define GET_SUCC(p)      (*((unsigned int *)p + 1))
+#define PUT_SUCC(p, val) (*((unsigned int *)p + 1) = (val))
 
+void * heap_listp;
+static unsigned int *starter = 0;
 
 
 /*********************************************************
@@ -90,35 +97,74 @@ team_t team = {
  */
 static void *coalesce(void *bp) 
 {
+    void *prev_bp, *next_bp;
+    unsigned int succ_free, prev_free;
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
 
     if (prev_alloc && next_alloc) {            /* Case 1 */
+        succ_free = GET_SUCC(starter);         /* Get the next node of the linked list*/
+        prev_free = (unsigned int) starter;
+        for(; succ_free!=0; succ_free = GET_SUCC(succ_free)){
+            /* insert into a proper place ordered */
+            /* 标准的链表插入*/
+            if(succ_free > (unsigned int)bp){
+                // 
+                PUT_PREV(succ_free, (unsigned int) bp);
+                PUT_SUCC(bp, succ_free);
+                PUT_SUCC(prev_free, (unsigned int)bp);
+                PUT_PREV(bp, prev_free);
+                return bp;
+            }
+            prev_free = succ_free;
+        }
+        PUT_SUCC(bp, succ_free);
+        PUT_SUCC(prev_free, (unsigned int)bp);
+        PUT_PREV(bp, prev_free);
         return bp;
     }
 
     else if (prev_alloc && !next_alloc) {      /* Case 2 */
-        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-        PUT(HDRP(bp), PACK(size, 0));
+        next_bp = NEXT_BLKP(bp);
+        size += GET_SIZE(HDRP(next_bp));     /* 此时是后面的bock是空的，所以需要合并*/
+        prev_free = GET_PREV(next_bp);
+        succ_free = GET_SUCC(next_bp);
+        PUT(HDRP(bp), PACK(size,0));        /* 设成 not allocated*/
         PUT(FTRP(bp), PACK(size,0));
+        PUT_PREV(bp, prev_free);
+        PUT_SUCC(bp, succ_free);
+        if(succ_free){
+            PUT_PREV(succ_free, (unsigned int)bp);
+        }
+        PUT_SUCC(prev_free, (unsigned int)bp);
     }
 
     else if (!prev_alloc && next_alloc) {      /* Case 3 */
-        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+        /*现在是前面的需要和当前的拼接在一起*/
+        prev_bp = PREV_BLKP(bp);
+        size += GET_SIZE(HDRP(prev_bp));
         PUT(FTRP(bp), PACK(size, 0));
-        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-        bp = PREV_BLKP(bp);
+        PUT(HDRP(prev_bp), PACK(size, 0));
+        bp = prev_bp;
     }
 
     else {                                     /* Case 4 */
-        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
-            GET_SIZE(FTRP(NEXT_BLKP(bp)));
-        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-        PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
-        bp = PREV_BLKP(bp);
-    }
+        /*两个都没有allocate，所以现在需要把两个都拼接起来*/
+        prev_bp = PREV_BLKP(bp);
+        next_bp = NEXT_BLKP(bp);
 
+        size += GET_SIZE(HDRP(prev_bp)) + 
+            GET_SIZE(FTRP(next_bp));
+        succ_free = GET_SUCC(next_bp);
+        PUT(HDRP(prev_bp), PACK(size, 0));
+        PUT(FTRP(next_bp), PACK(size, 0));
+        bp = PREV_BLKP(bp);
+        PUT_SUCC(bp, succ_free);
+        if(succ_free){
+            PUT_PREV(succ_free, (unsigned int)bp);
+        }
+    }
     return bp;
 }
 
@@ -152,20 +198,26 @@ static void *extend_heap(size_t words)
  * mm_init - Initialize the memory manager 
  */
 
-void * heap_listp;
 int mm_init(void) 
 {
-    /* Create the initial empty heap */
-    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1) 
-        return -1;
-    PUT(heap_listp, 0);                          /* Alignment padding */
-    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1)); /* Prologue header */ 
-    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1)); /* Prologue footer */ 
-    PUT(heap_listp + (3*WSIZE), PACK(0, 1));     /* Epilogue header */
-    heap_listp += (2*WSIZE);                      
+    void *bp;
+    mem_init();
 
+    /* Create the initial empty heap */
+    if ((heap_listp = (char *)mem_sbrk(6*WSIZE)) == (char *)-1)
+        return -1;
+
+    starter = (unsigned int *)mem_heap_lo() + 1;
+    PUT(heap_listp, 0);	                         /* Alignment padding */
+    PUT_PREV(starter, 0);
+    PUT_SUCC(starter, 0);                        /* First, starter is alone */
+    PUT(heap_listp + (3*WSIZE), PACK(DSIZE, 1)); /* Prologue header */
+    PUT(heap_listp + (4*WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
+    PUT(heap_listp + (5*WSIZE), PACK(0, 1));     /* Epilogue header */
+    heap_listp += (4*WSIZE);
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
-    if (extend_heap(CHUNKSIZE/WSIZE) == NULL) 
+    bp = extend_heap(CHUNKSIZE/WSIZE);
+    if (bp == NULL)
         return -1;
     return 0;
 }
@@ -178,17 +230,34 @@ int mm_init(void)
 static void place(void *bp, size_t asize)
 {
     size_t csize = GET_SIZE(HDRP(bp));   
+    unsigned int prev_free, succ_free;
+    /*获取前后两个 free 的 block*/
+    prev_free = GET_PREV(bp);
+    succ_free = GET_SUCC(bp);
 
-    if ((csize - asize) >= (2*DSIZE)) { 
+    if ((csize - asize) >= (2*DSIZE)) {
+        /*有空余的空间，所以可以break掉成两部分，一部分allocated*/ 
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize-asize, 0));
         PUT(FTRP(bp), PACK(csize-asize, 0));
+        
+        if(succ_free){
+            PUT_PREV(succ_free, (unsigned int)bp);
+        }
+        PUT_SUCC(bp, succ_free);
+        PUT_SUCC(prev_free, (unsigned int)bp);
+        PUT_PREV(bp, prev_free);
     }
     else { 
+        /* just fit in*/
         PUT(HDRP(bp), PACK(csize, 1));
         PUT(FTRP(bp), PACK(csize, 1));
+        PUT_SUCC(prev_free, succ_free);
+        if(succ_free){
+            PUT_PREV(succ_free, prev_free);
+        }
     }
 }
 
@@ -200,15 +269,14 @@ static void place(void *bp, size_t asize)
 static void *find_fit(size_t asize)
 {
 
-    void *bp;
+    unsigned int bp;
 
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+    for (bp = GET_SUCC(starter); bp != 0; bp = GET_SUCC(bp)) {
+        if( asize <= GET_SIZE(HDRP(bp))){
             return bp;
         }
     }
     return NULL; /* No fit */
-
 }
 
 
